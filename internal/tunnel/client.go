@@ -141,6 +141,13 @@ func (c *Client) dialAndServe(ctx context.Context) error {
 			go c.heartbeatLoop(hbCtx, send)
 
 		case "register_nack":
+			if frame.Reason == "transient_unavailable" {
+				// Relay-side transient failure (503-equivalent) — not an
+				// identity problem; reconnect-with-backoff will succeed once
+				// the relay recovers.
+				c.log.Warn("relay transiently unavailable at registration; will retry")
+				return errors.New("relay transient_unavailable at registration")
+			}
 			c.log.Error("relay rejected registration", "reason", frame.Reason)
 			return errNacked
 

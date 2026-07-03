@@ -14,6 +14,7 @@ func TestParseFrameStrictness(t *testing.T) {
 		{"register_ack valid", `{"type":"register_ack","v":1,"tunnelId":"t1"}`, false},
 		{"register_ack missing tunnelId", `{"type":"register_ack","v":1}`, true},
 		{"register_nack valid", `{"type":"register_nack","v":1,"reason":"invalid_identity"}`, false},
+		{"register_nack transient", `{"type":"register_nack","v":1,"reason":"transient_unavailable"}`, false},
 		{"register_nack unknown reason", `{"type":"register_nack","v":1,"reason":"nope"}`, true},
 		{"heartbeat valid", `{"type":"heartbeat","v":1}`, false},
 		{"request valid", `{"type":"request","v":1,"correlationId":"c1","target":"echo","payload":{}}`, false},

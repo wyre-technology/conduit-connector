@@ -54,7 +54,7 @@ func ParseFrame(raw []byte) (*Frame, error) {
 		}
 	case "register_nack":
 		switch f.Reason {
-		case "invalid_identity", "revoked_identity", "malformed":
+		case "invalid_identity", "revoked_identity", "malformed", "transient_unavailable":
 		default:
 			return nil, fmt.Errorf("register_nack with unknown reason %q", f.Reason)
 		}

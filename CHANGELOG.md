@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `transient_unavailable` register_nack reason: treated as retryable (reconnect-with-backoff) rather than permanent stop — pairs with conduit's relay hardening (conduit PR #632).
+
 - Initial Go agent (M-B skeleton): frame-v1 tunnel client (dial, register,
   heartbeat, reconnect-with-backoff, request dispatch) faithfully ported from
   conduit's TypeScript `tunnel-client.ts`/`frame-protocol.ts`, built-in `echo`
