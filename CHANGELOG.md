@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `list_tables` now excludes engine system catalogs (pg_catalog / information_schema / sys) so it returns the site's own tables, not hundreds of system rows.
+
 - **`postgres` connector** (read-only): PostgreSQL/`pgx`-backed query /
   list_tables / describe_table, same read-only guard + row caps as `mssql`.
   Driver-agnostic query + MCP logic extracted to `internal/connectors/sqlcommon`

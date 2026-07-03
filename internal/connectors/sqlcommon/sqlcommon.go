@@ -108,7 +108,14 @@ func (c *Connector) callTool(ctx context.Context, name string, args json.RawMess
 			Schema string `json:"schema"`
 		}
 		_ = json.Unmarshal(args, &a)
-		q := `SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'`
+		// Exclude the engines' system catalogs so the list is the site's own
+		// tables, not hundreds of pg_catalog / sys rows. The names are
+		// driver-specific but harmless cross-driver (a postgres DB has no
+		// 'sys' schema, a sqlserver DB no 'pg_catalog') — one predicate serves
+		// both.
+		q := `SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+		      WHERE TABLE_TYPE = 'BASE TABLE'
+		        AND TABLE_SCHEMA NOT IN ('pg_catalog', 'information_schema', 'sys', 'INFORMATION_SCHEMA')`
 		params := []any{}
 		if a.Schema != "" {
 			q += ` AND TABLE_SCHEMA = ` + c.placeholder(1)
