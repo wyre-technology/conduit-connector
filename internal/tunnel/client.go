@@ -15,17 +15,23 @@ import (
 // target and returns the JSON-RPC-shaped response payload.
 type Handler func(ctx context.Context, target string, payload json.RawMessage) (json.RawMessage, error)
 
-// Options configures a Client. Semantics mirror conduit's TS TunnelClient.
+// ConfigHandler applies a cloud-pushed config_update and returns the applied
+// connector slugs (⊆ pushed slugs — the relay rejects over-claims). The
+// returned error becomes the ack's error field; applied is reported either way.
+type ConfigHandler func(ctx context.Context, configVersion int, connectors map[string]json.RawMessage) (applied []string, err error)
+
+// Options configures a Client. The agent speaks protocol v2: enrollment is
+// identity-only and capabilities arrive via cloud-pushed config_update.
 type Options struct {
 	// RelayURL is the WYRE relay WSS endpoint, e.g. wss://conduit-wss.wyre.ai.
 	// Must be wss:// — enforced by the caller's boot guards.
 	RelayURL string
-	// EnrollmentToken is the per-tunnel signed identity (v1).
+	// EnrollmentToken is the per-tunnel signed identity-only token.
 	EnrollmentToken string
-	// Capabilities this connector offers, byte-for-byte slugs.
-	Capabilities []string
 	// OnRequest handles inbound request frames.
 	OnRequest Handler
+	// OnConfigUpdate applies cloud-pushed connector config.
+	OnConfigUpdate ConfigHandler
 	// HeartbeatInterval defaults to 30s.
 	HeartbeatInterval time.Duration
 	// MaxBackoff caps reconnect backoff; defaults to 30s.
@@ -36,8 +42,9 @@ type Options struct {
 const baseBackoff = time.Second
 
 // Client maintains the outbound tunnel: dial, register, heartbeat, dispatch,
-// reconnect-with-backoff. A register_nack stops the client permanently (the
-// operator must fix the token; reconnecting cannot help — TS parity).
+// config apply/ack, reconnect-with-backoff. An identity register_nack stops
+// the client permanently (the operator must fix the token); a
+// transient_unavailable nack retries with backoff.
 type Client struct {
 	opts    Options
 	log     *slog.Logger
@@ -45,7 +52,6 @@ type Client struct {
 
 	mu       sync.Mutex
 	tunnelID string
-	stopped  bool
 }
 
 func NewClient(opts Options) *Client {
@@ -101,8 +107,8 @@ func (c *Client) dialAndServe(ctx context.Context) error {
 
 	// One writer at a time: heartbeat ticker + concurrent request handlers.
 	var writeMu sync.Mutex
-	send := func(f Frame) error {
-		b, err := json.Marshal(f)
+	send := func(frame any) error {
+		b, err := json.Marshal(frame)
 		if err != nil {
 			return err
 		}
@@ -113,7 +119,7 @@ func (c *Client) dialAndServe(ctx context.Context) error {
 		return conn.Write(wctx, websocket.MessageText, b)
 	}
 
-	if err := send(Register(c.opts.EnrollmentToken, c.opts.Capabilities)); err != nil {
+	if err := send(Register(c.opts.EnrollmentToken)); err != nil {
 		return err
 	}
 
@@ -136,8 +142,8 @@ func (c *Client) dialAndServe(ctx context.Context) error {
 		switch frame.Type {
 		case "register_ack":
 			c.setTunnelID(frame.TunnelID)
-			c.backoff = baseBackoff // clean registration resets backoff (TS parity)
-			c.log.Info("tunnel registered", "tunnelId", frame.TunnelID, "capabilities", c.opts.Capabilities)
+			c.backoff = baseBackoff // a clean registration resets backoff
+			c.log.Info("tunnel registered (v2, zero capabilities until config push)", "tunnelId", frame.TunnelID)
 			go c.heartbeatLoop(hbCtx, send)
 
 		case "register_nack":
@@ -154,16 +160,18 @@ func (c *Client) dialAndServe(ctx context.Context) error {
 		case "request":
 			go c.handleRequest(ctx, frame, send)
 
+		case "config_update":
+			go c.handleConfigUpdate(ctx, frame, send)
+
 		case "heartbeat":
-			// Relay-originated heartbeats are ignored (TS parity: only
-			// ack/nack/request are acted on).
+			// Relay-originated heartbeats are ignored.
 		}
 	}
 }
 
-func (c *Client) handleRequest(ctx context.Context, frame *Frame, send func(Frame) error) {
+func (c *Client) handleRequest(ctx context.Context, frame *Frame, send func(any) error) {
 	payload, err := c.opts.OnRequest(ctx, frame.Target, frame.Payload)
-	var out Frame
+	var out any
 	if err != nil {
 		out = ErrorResponse(frame.CorrelationID, err.Error())
 	} else {
@@ -174,7 +182,20 @@ func (c *Client) handleRequest(ctx context.Context, frame *Frame, send func(Fram
 	}
 }
 
-func (c *Client) heartbeatLoop(ctx context.Context, send func(Frame) error) {
+func (c *Client) handleConfigUpdate(ctx context.Context, frame *Frame, send func(any) error) {
+	version := *frame.ConfigVersion // ParseFrame guarantees non-nil for config_update
+	applied, err := c.opts.OnConfigUpdate(ctx, version, frame.Connectors)
+	var ackErr *FrameError
+	if err != nil {
+		ackErr = &FrameError{Code: -32000, Message: err.Error()}
+	}
+	c.log.Info("config applied", "configVersion", version, "applied", applied, "error", err)
+	if sendErr := send(ConfigAck(frame.CorrelationID, version, applied, ackErr)); sendErr != nil {
+		c.log.Warn("failed to send config_ack", "correlationId", frame.CorrelationID, "error", sendErr)
+	}
+}
+
+func (c *Client) heartbeatLoop(ctx context.Context, send func(any) error) {
 	ticker := time.NewTicker(c.opts.HeartbeatInterval)
 	defer ticker.Stop()
 	for {
