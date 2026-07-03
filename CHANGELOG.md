@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`mssql` connector** (M-D, the Sage 100 Premium path): read-only SQL Server
+  tools — `query` (single SELECT/WITH statement, comment/multi-statement
+  smuggling refused, row caps), `list_tables`, `describe_table`. Config pushed
+  via `config_update` (host/port/database/user/password/encrypt); lazy
+  connection pool so a down database never blocks config application. The
+  real enforcement is the site's read-only SQL principal; the code guard is
+  belt-and-suspenders.
+
 ### Changed
 
 - **Protocol v2 (breaking, pre-release)**: the agent now registers identity-only

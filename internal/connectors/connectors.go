@@ -9,8 +9,8 @@
 // replaced on each config_update. A connector serves requests only while
 // enabled by the current config. Config is held in memory only — on restart
 // the tunnel re-registers with zero capabilities and the cloud re-pushes
-// (the gateway re-pushes stored config on tunnel registration; a local
-// encrypted cache is a later optimization, not a correctness requirement).
+// (the gateway's reconciler re-pushes stored config; a local encrypted cache
+// is a later optimization, not a correctness requirement).
 package connectors
 
 import (
@@ -20,33 +20,40 @@ import (
 	"sync"
 
 	"github.com/wyre-technology/conduit-connector/internal/connectors/echo"
+	"github.com/wyre-technology/conduit-connector/internal/connectors/mssql"
 )
 
-// builtin is one compiled-in connector: validate/absorb config, handle requests.
-type builtin struct {
-	// configure applies per-connector config; returning an error keeps the
-	// connector disabled and surfaces in the config_ack error.
-	configure func(config json.RawMessage) error
-	handle    func(ctx context.Context, payload json.RawMessage) (json.RawMessage, error)
-}
+// Handler serves one inbound tunnel request for an enabled connector.
+type Handler func(ctx context.Context, payload json.RawMessage) (json.RawMessage, error)
 
-var builtins = map[string]builtin{
-	"echo": {
-		configure: func(json.RawMessage) error { return nil }, // echo takes no config
-		handle: func(_ context.Context, payload json.RawMessage) (json.RawMessage, error) {
+// factory builds a configured connector instance from its pushed config;
+// returning an error keeps the connector disabled and surfaces in the
+// config_ack error.
+type factory func(config json.RawMessage) (Handler, error)
+
+var builtins = map[string]factory{
+	"echo": func(json.RawMessage) (Handler, error) { // echo takes no config
+		return func(_ context.Context, payload json.RawMessage) (json.RawMessage, error) {
 			return echo.Handle(payload)
-		},
+		}, nil
+	},
+	"mssql": func(cfg json.RawMessage) (Handler, error) {
+		c, err := mssql.New(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return c.Handle, nil
 	},
 }
 
 // Registry is the config-driven connector state.
 type Registry struct {
 	mu      sync.RWMutex
-	enabled map[string]builtin
+	enabled map[string]Handler
 }
 
 func NewRegistry() *Registry {
-	return &Registry{enabled: map[string]builtin{}}
+	return &Registry{enabled: map[string]Handler{}}
 }
 
 // Apply replaces the enabled set from a cloud-pushed config_update. Returns
@@ -56,24 +63,25 @@ func NewRegistry() *Registry {
 // is carried for logging/idempotency by the caller; application itself is
 // version-agnostic (a re-push of the same config re-applies identically).
 func (r *Registry) Apply(_ context.Context, _ int, connectors map[string]json.RawMessage) ([]string, error) {
-	next := map[string]builtin{}
+	next := map[string]Handler{}
 	applied := make([]string, 0, len(connectors))
 	var firstErr error
 	for slug, cfg := range connectors {
-		b, ok := builtins[slug]
+		build, ok := builtins[slug]
 		if !ok {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("no built-in connector for %q in this binary version", slug)
 			}
 			continue
 		}
-		if err := b.configure(cfg); err != nil {
+		handler, err := build(cfg)
+		if err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("connector %q rejected its config: %w", slug, err)
 			}
 			continue
 		}
-		next[slug] = b
+		next[slug] = handler
 		applied = append(applied, slug)
 	}
 	r.mu.Lock()
@@ -86,10 +94,10 @@ func (r *Registry) Apply(_ context.Context, _ int, connectors map[string]json.Ra
 // its target slug.
 func (r *Registry) Handle(ctx context.Context, target string, payload json.RawMessage) (json.RawMessage, error) {
 	r.mu.RLock()
-	b, ok := r.enabled[target]
+	handler, ok := r.enabled[target]
 	r.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("capability %q is not enabled by the current config", target)
 	}
-	return b.handle(ctx, payload)
+	return handler(ctx, payload)
 }
