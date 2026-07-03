@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`postgres` connector** (read-only): PostgreSQL/`pgx`-backed query /
+  list_tables / describe_table, same read-only guard + row caps as `mssql`.
+  Driver-agnostic query + MCP logic extracted to `internal/connectors/sqlcommon`
+  so mssql and postgres share one implementation (only DSN + placeholder style
+  differ).
+
+
 - **`mssql` connector** (M-D, the Sage 100 Premium path): read-only SQL Server
   tools — `query` (single SELECT/WITH statement, comment/multi-statement
   smuggling refused, row caps), `list_tables`, `describe_table`. Config pushed

@@ -1,4 +1,4 @@
-package mssql
+package postgres
 
 import (
 	"encoding/json"
@@ -21,8 +21,8 @@ func TestNewConfigValidation(t *testing.T) {
 			}
 		})
 	}
-	// Valid config prepares a lazy pool without connecting.
-	if _, err := New(json.RawMessage(`{"host":"127.0.0.1","database":"demo","user":"u","password":"p","encrypt":"disable"}`)); err != nil {
+	// Valid config prepares a lazy pool without connecting (default port + sslmode).
+	if _, err := New(json.RawMessage(`{"host":"127.0.0.1","database":"app","user":"u","password":"p","sslmode":"disable"}`)); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
 	}
 }

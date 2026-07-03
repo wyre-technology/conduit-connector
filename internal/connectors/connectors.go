@@ -21,6 +21,7 @@ import (
 
 	"github.com/wyre-technology/conduit-connector/internal/connectors/echo"
 	"github.com/wyre-technology/conduit-connector/internal/connectors/mssql"
+	"github.com/wyre-technology/conduit-connector/internal/connectors/postgres"
 )
 
 // Handler serves one inbound tunnel request for an enabled connector.
@@ -39,6 +40,13 @@ var builtins = map[string]factory{
 	},
 	"mssql": func(cfg json.RawMessage) (Handler, error) {
 		c, err := mssql.New(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return c.Handle, nil
+	},
+	"postgres": func(cfg json.RawMessage) (Handler, error) {
+		c, err := postgres.New(cfg)
 		if err != nil {
 			return nil, err
 		}
