@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`mysql` connector** (read-only, MySQL/MariaDB): same read-only query / list_tables / describe_table tools as postgres/mssql, over the go-sql-driver. list_tables also excludes MySQL system schemas (mysql, performance_schema).
+
 - `list_tables` now excludes engine system catalogs (pg_catalog / information_schema / sys) so it returns the site's own tables, not hundreds of system rows.
 
 - **`postgres` connector** (read-only): PostgreSQL/`pgx`-backed query /

@@ -115,7 +115,8 @@ func (c *Connector) callTool(ctx context.Context, name string, args json.RawMess
 		// both.
 		q := `SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
 		      WHERE TABLE_TYPE = 'BASE TABLE'
-		        AND TABLE_SCHEMA NOT IN ('pg_catalog', 'information_schema', 'sys', 'INFORMATION_SCHEMA')`
+		        AND TABLE_SCHEMA NOT IN ('pg_catalog', 'information_schema', 'INFORMATION_SCHEMA',
+		                                 'sys', 'mysql', 'performance_schema')`
 		params := []any{}
 		if a.Schema != "" {
 			q += ` AND TABLE_SCHEMA = ` + c.placeholder(1)
