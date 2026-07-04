@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Named connector instances**: a connector config may carry an optional `type` field that decouples the routing **slug** from the built-in that implements it — so a site can run multiple instances of one built-in (e.g. two `mcp-proxy` servers under `veeam-vbr` + `veeam-one`, each surfaced as its own `slug__tool`). Absent `type`, the slug is the type (every existing config unchanged).
+
 - **mcp-proxy diagnostics**: a failed local MCP server (bad command, backend unreachable at startup, mid-request crash) now surfaces the child's recent **stderr** in the connector error instead of an opaque `closed stdout: EOF` — so an operator sees the actual cause.
 
 - **`mcp-proxy` connector**: a generic connector that spawns a LOCAL MCP

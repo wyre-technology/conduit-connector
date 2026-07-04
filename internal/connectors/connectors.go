@@ -72,6 +72,17 @@ var builtins = map[string]factory{
 	},
 }
 
+// connectorType reads the optional "type" field that decouples a connector's
+// routing slug from the built-in that implements it. Empty when absent (the
+// slug is then used as the type).
+func connectorType(cfg json.RawMessage) string {
+	var probe struct {
+		Type string `json:"type"`
+	}
+	_ = json.Unmarshal(cfg, &probe)
+	return probe.Type
+}
+
 // Registry is the config-driven connector state.
 type Registry struct {
 	mu      sync.RWMutex
@@ -93,10 +104,23 @@ func (r *Registry) Apply(_ context.Context, _ int, connectors map[string]json.Ra
 	applied := make([]string, 0, len(connectors))
 	var firstErr error
 	for slug, cfg := range connectors {
-		build, ok := builtins[slug]
+		// The routing slug and the built-in that implements it are decoupled by
+		// an optional "type" field: absent, the slug IS the type (every v1
+		// config); present, one built-in can back multiple named instances
+		// (e.g. two mcp-proxy servers under slugs "veeam-vbr" and "veeam-one",
+		// each surfaced as its own `<slug>__<tool>`).
+		builtinKey := slug
+		if t := connectorType(cfg); t != "" {
+			builtinKey = t
+		}
+		build, ok := builtins[builtinKey]
 		if !ok {
 			if firstErr == nil {
-				firstErr = fmt.Errorf("no built-in connector for %q in this binary version", slug)
+				if builtinKey == slug {
+					firstErr = fmt.Errorf("no built-in connector for %q in this binary version", slug)
+				} else {
+					firstErr = fmt.Errorf("connector %q requests type %q, which has no built-in in this binary version", slug, builtinKey)
+				}
 			}
 			continue
 		}
