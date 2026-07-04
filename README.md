@@ -9,32 +9,57 @@ outbound 443 works, the site is connected. No firewall holes, ever.
 [conduit](https://github.com/wyre-technology/conduit) repo. This repo is the Go
 agent named there (milestone M-B onward).
 
-## Run (v1-compatible env config)
+## Install (Linux)
+
+`install.sh` downloads the binary, installs it as a hardened systemd service,
+and starts it. It reads its two settings from the environment, so an RMM can set
+site variables and run it unattended:
 
 ```
 RELAY_URL=wss://conduit-wss.wyre.ai \
-ENROLLMENT_TOKEN=<minted in Conduit> \
-CAPABILITIES=echo \
+ENROLLMENT_TOKEN=<mint in Conduit: site → Deploy connector> \
+bash install.sh
+```
+
+Optional: `CONNECTOR_URL` (a direct/signed binary link, e.g. from the Conduit
+wizard) or `CONNECTOR_VERSION` (a GitHub Release tag; default `latest`, plus
+`GH_TOKEN` while the repo is private). Windows service + a signed installer are
+the M-E follow-up.
+
+## Run directly (protocol v2)
+
+```
+RELAY_URL=wss://conduit-wss.wyre.ai \
+ENROLLMENT_TOKEN=<identity-only token minted in Conduit> \
 ./conduit-connector
 ```
 
-Boot refuses loudly on any missing/invalid config (six-guard discipline ported
-from conduit `src/onprem/index.ts`), including a capability with no built-in
-connector.
+Enrollment is **identity-only** — the token binds the org, not capabilities.
+The connector comes online empty; Conduit pushes which connectors to run and
+their config over the tunnel (the wizard, or the admin API). There is **no
+`CAPABILITIES` env var** — the connector boot-fails if it is set (that was the
+legacy v1 container). Boot otherwise refuses loudly on missing/invalid config.
 
-> Frame v2 (identity-only enrollment + cloud-pushed config via the Conduit
-> wizard) replaces `CAPABILITIES` — the env form remains for v1 relay compat
-> and headless testing.
+## Built-in connectors
+
+Compiled in — no plugins, no sidecars. Enabled per-site via cloud-pushed config.
+
+| Slug | What it does |
+|---|---|
+| `echo` | Connectivity proof (round-trips its input). |
+| `mssql` | Read-only SQL Server (Sage 100 Premium) — `query` / `list_tables` / `describe_table`. |
+| `postgres` | Read-only PostgreSQL — same three tools. |
+| `mysql` | Read-only MySQL/MariaDB — same three tools. |
+
+The SQL connectors share `internal/connectors/sqlcommon` (one read-only MCP +
+query implementation; each driver package is just its DSN + placeholder style).
 
 ## Layout
 
 - `cmd/conduit-connector` — entry point, env guards, service lifecycle
-- `internal/tunnel` — frame protocol (v1) + WSS client: dial, register,
-  heartbeat (30s), reconnect (1s→30s backoff), request dispatch. Faithful port
-  of conduit `src/onprem/tunnel-client.ts` + `src/relay/frame-protocol.ts` —
-  keep the two in lockstep until frame v2 lands.
-- `internal/connectors` — built-in connectors, compiled in (no plugins, no
-  sidecars). v1: `echo`; next: `mssql`/`sage100` (read-only), `veeam`.
+- `internal/tunnel` — frame protocol (v1 + v2) + WSS client: dial, register,
+  heartbeat (30s), reconnect (1s→30s backoff), request dispatch, config apply.
+- `internal/connectors` — the built-in connectors + the config-driven registry.
 
 ## Development
 
