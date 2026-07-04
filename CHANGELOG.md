@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **mcp-proxy diagnostics**: a failed local MCP server (bad command, backend unreachable at startup, mid-request crash) now surfaces the child's recent **stderr** in the connector error instead of an opaque `closed stdout: EOF` — so an operator sees the actual cause.
+
 - **`mcp-proxy` connector**: a generic connector that spawns a LOCAL MCP
   server (any stdio MCP server — e.g. the Veeam MCP servers) and forwards
   tools/list + tools/call over the tunnel. Config: `{command, args, env, cwd}`.

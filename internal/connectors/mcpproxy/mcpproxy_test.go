@@ -83,3 +83,23 @@ func mustJSON(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
+
+func TestSpawnErrorSurfacesChildStderr(t *testing.T) {
+	// A child that prints a diagnostic to stderr then exits (never speaks MCP)
+	// should fail spawn with that stderr included — not an opaque EOF.
+	script := `import sys; sys.stderr.write("FATAL: cannot reach backend xyz\n"); sys.exit(1)`
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+	c, err := New(json.RawMessage(`{"command":"python3","args":["-c",`+mustJSON(script)+`]}`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Handle(context.Background(), json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	if err == nil {
+		t.Fatal("expected an error from a child that never speaks MCP")
+	}
+	if !strings.Contains(err.Error(), "cannot reach backend xyz") {
+		t.Fatalf("error should surface the child's stderr cause, got: %v", err)
+	}
+}

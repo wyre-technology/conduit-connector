@@ -100,12 +100,37 @@ func (c *Connector) Handle(ctx context.Context, payload json.RawMessage) (json.R
 	resp, err := c.child.roundTrip(ctx, payload, idProbe.ID, requestTimeout)
 	if err != nil {
 		// The child is likely dead / desynced — drop it so the next request
-		// respawns a clean process.
+		// respawns a clean process. Surface its recent stderr so a crash cause
+		// (e.g. lost backend connectivity) is visible, not just "closed stdout".
+		suffix := c.child.stderrSuffix()
 		c.child.close()
 		c.child = nil
-		return nil, fmt.Errorf("mcp-proxy: local MCP server request failed: %w", err)
+		return nil, fmt.Errorf("mcp-proxy: local MCP server request failed%s: %w", suffix, err)
 	}
 	return resp, nil
+}
+
+// stderrTail keeps the most recent bytes of a child's stderr (bounded), so a
+// spawn/handshake/request failure can include the actual cause.
+type stderrTail struct {
+	mu  sync.Mutex
+	buf []byte
+	max int
+}
+
+func (s *stderrTail) add(line string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.buf = append(append(s.buf, line...), '\n')
+	if len(s.buf) > s.max {
+		s.buf = s.buf[len(s.buf)-s.max:]
+	}
+}
+
+func (s *stderrTail) get() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return string(trimSpace(s.buf))
 }
 
 // child is a live MCP-over-stdio subprocess.
@@ -113,6 +138,8 @@ type child struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout *bufio.Reader
+	stderr *stderrTail   // recent stderr, surfaced in errors
+	exited chan struct{} // closed when the stderr pump sees EOF (child gone)
 }
 
 func (c *Connector) spawn(ctx context.Context) (*child, error) {
@@ -135,24 +162,54 @@ func (c *Connector) spawn(ctx context.Context) (*child, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	// Drain stderr to the connector log so the child's diagnostics are visible.
+
+	ch := &child{
+		cmd:    cmd,
+		stdin:  stdin,
+		stdout: bufio.NewReaderSize(stdoutPipe, 1<<20),
+		stderr: &stderrTail{max: 4096},
+		exited: make(chan struct{}),
+	}
+	// Pump stderr: log each line AND keep the recent tail so a failed startup
+	// (e.g. the child auth-erroring against an unreachable backend) surfaces
+	// the actual cause instead of an opaque "closed stdout" — the difference
+	// between an operator fixing config and filing a ticket.
 	go func() {
 		s := bufio.NewScanner(stderrPipe)
+		s.Buffer(make([]byte, 0, 64*1024), 1<<20)
 		for s.Scan() {
-			c.log.Debug("mcp-proxy child stderr", "command", c.cfg.Command, "line", s.Text())
+			line := s.Text()
+			ch.stderr.add(line)
+			c.log.Debug("mcp-proxy child stderr", "command", c.cfg.Command, "line", line)
 		}
+		close(ch.exited)
 	}()
-
-	ch := &child{cmd: cmd, stdin: stdin, stdout: bufio.NewReaderSize(stdoutPipe, 1<<20)}
 
 	// MCP handshake: initialize, then the initialized notification. Without
 	// this the server rejects tools/* calls.
 	if err := ch.initialize(ctx); err != nil {
 		ch.close()
-		return nil, fmt.Errorf("initialize handshake failed: %w", err)
+		return nil, fmt.Errorf("initialize handshake failed%s: %w", ch.stderrSuffix(), err)
 	}
 	c.log.Info("mcp-proxy: local MCP server started", "command", c.cfg.Command)
 	return ch, nil
+}
+
+// stderrSuffix returns a " (child stderr: …)" fragment for error messages,
+// giving the child a brief moment to flush its final output first. Empty when
+// the child wrote nothing to stderr.
+func (ch *child) stderrSuffix() string {
+	// The initialize failure and the child's stderr crash output race; wait
+	// briefly for the pump to drain the child's final lines.
+	select {
+	case <-ch.exited:
+	case <-time.After(500 * time.Millisecond):
+	}
+	tail := ch.stderr.get()
+	if tail == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (child stderr: %s)", tail)
 }
 
 func (ch *child) initialize(ctx context.Context) error {
