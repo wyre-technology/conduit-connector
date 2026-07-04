@@ -20,6 +20,9 @@ import (
 	"sync"
 
 	"github.com/wyre-technology/conduit-connector/internal/connectors/echo"
+	"log/slog"
+
+	"github.com/wyre-technology/conduit-connector/internal/connectors/mcpproxy"
 	"github.com/wyre-technology/conduit-connector/internal/connectors/mssql"
 	"github.com/wyre-technology/conduit-connector/internal/connectors/mysql"
 	"github.com/wyre-technology/conduit-connector/internal/connectors/postgres"
@@ -55,6 +58,13 @@ var builtins = map[string]factory{
 	},
 	"mysql": func(cfg json.RawMessage) (Handler, error) {
 		c, err := mysql.New(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return c.Handle, nil
+	},
+	"mcp-proxy": func(cfg json.RawMessage) (Handler, error) {
+		c, err := mcpproxy.New(cfg, slog.Default())
 		if err != nil {
 			return nil, err
 		}
