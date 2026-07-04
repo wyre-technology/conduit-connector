@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`mcp-proxy` connector**: a generic connector that spawns a LOCAL MCP
+  server (any stdio MCP server — e.g. the Veeam MCP servers) and forwards
+  tools/list + tools/call over the tunnel. Config: `{command, args, env, cwd}`.
+  Tunnels an existing MCP server unchanged instead of rewriting it as a
+  built-in — the whole MCP ecosystem, reachable on-prem.
+
 - **Linux install path (M-E)**: `install.sh` (RMM-variable-aware: reads
   RELAY_URL + ENROLLMENT_TOKEN from env, downloads the binary, installs a
   hardened systemd service, starts it) + a **Release workflow** that publishes

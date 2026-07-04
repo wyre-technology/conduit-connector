@@ -32,6 +32,7 @@ const docsBase = "https://conduit.wyre.ai/docs/guides/onprem"
 
 func main() {
 	log := newLogger()
+	slog.SetDefault(log) // so connectors that log (mcp-proxy child stderr) use it
 
 	relayURL, token, err := requireEnv()
 	if err != nil {
