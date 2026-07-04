@@ -2,9 +2,27 @@ name: Release
 
 # Publishes cross-compiled binaries as GitHub Release assets when a v* tag is
 # pushed, so install.sh (and RMM fleet deploys) can pull a pinned version.
-# Windows binaries are UNSIGNED here — Authenticode signing lands with the
-# Azure Artifact Signing cert (M-E); until then the Windows asset is provided
-# as-is for testing, not production.
+#
+# The Windows binary is Authenticode-signed with Azure Artifact Signing when
+# signing is configured (see the `sign-windows` job). Until then it ships
+# UNSIGNED — the sign job is skipped and the release publishes the raw .exe.
+#
+# ── Turning signing on (one-time, after identity validation completes) ───────
+# 1. Create a Public Trust certificate profile on the `wyre-signing` account:
+#      az artifact-signing certificate-profile create \
+#        -g rg-wyre-signing --account-name wyre-signing \
+#        -n <profile-name> --profile-type PublicTrust \
+#        --identity-validation-id <id-from-portal-Identity-validations-blade>
+# 2. Create an Entra app registration with a client secret and grant it the
+#    "Artifact Signing Certificate Profile Signer" role on the wyre-signing
+#    account (az role assignment create --assignee <app> --role
+#    "Artifact Signing Certificate Profile Signer" --scope <account-id>).
+# 3. Set these repo SECRETS: AZURE_TENANT_ID, AZURE_CLIENT_ID,
+#    AZURE_CLIENT_SECRET.
+# 4. Set repo VARIABLE SIGNING_CERT_PROFILE to the profile name from step 1.
+#    Setting it is the switch: the sign-windows job runs only when it is set.
+# The endpoint (eastus) and account name are fixed below; change them only if
+# the signing account moves regions/names.
 
 on:
   push:
@@ -36,14 +54,73 @@ jobs:
               go build -trimpath -ldflags="-s -w -X main.version=${version}" \
               -o "dist/${out}" ./cmd/conduit-connector
           done
-          ( cd dist && sha256sum conduit-connector-* > SHA256SUMS )
           ls -la dist/
 
-      - name: Publish GitHub Release
+      # Checksums are generated in the publish job (after any signing), so the
+      # SHA256SUMS match the final bytes of the signed .exe.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: dist/
+          retention-days: 1
+
+  sign-windows:
+    # Authenticode-sign the Windows .exe with Azure Artifact Signing. Runs only
+    # once the SIGNING_CERT_PROFILE repo variable is set (post identity
+    # validation + cert-profile creation); otherwise skipped and the release
+    # ships the unsigned .exe. Requires a Windows runner (signtool).
+    needs: build
+    if: vars.SIGNING_CERT_PROFILE != ''
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+
+      - name: Sign the Windows binary
+        uses: Azure/trusted-signing-action@v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          signing-account-name: wyre-signing
+          certificate-profile-name: ${{ vars.SIGNING_CERT_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      # Overwrite the shared artifact with the now-signed .exe so the publish
+      # job picks it up. Immutable-by-default in v4, hence overwrite: true.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: dist/
+          overwrite: true
+          retention-days: 1
+
+  publish:
+    # Publish the release with whatever bytes exist after the (optional) sign
+    # step — signed .exe when sign-windows ran, unsigned when it was skipped.
+    needs: [build, sign-windows]
+    if: always() && needs.build.result == 'success' && needs.sign-windows.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+
+      - name: Checksums + publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          ( cd dist && sha256sum conduit-connector-* > SHA256SUMS )
+          ls -la dist/
           gh release create "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
