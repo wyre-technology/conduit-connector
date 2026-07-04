@@ -50,9 +50,28 @@ Compiled in — no plugins, no sidecars. Enabled per-site via cloud-pushed confi
 | `mssql` | Read-only SQL Server (Sage 100 Premium) — `query` / `list_tables` / `describe_table`. |
 | `postgres` | Read-only PostgreSQL — same three tools. |
 | `mysql` | Read-only MySQL/MariaDB — same three tools. |
+| `mcp-proxy` | Fronts any local stdio MCP server (e.g. the Veeam MCP server): spawns `{command, args, env, cwd}`, does the MCP handshake, forwards its tools. |
 
 The SQL connectors share `internal/connectors/sqlcommon` (one read-only MCP +
 query implementation; each driver package is just its DSN + placeholder style).
+
+### Named instances (multiple connectors of one type)
+
+A connector's config key is its **slug** (the `slug__tool` prefix clients see).
+By default the slug also names the built-in. To run **several instances of one
+built-in**, add a `type` field — the slug becomes a free-form name and `type`
+selects the built-in:
+
+```json
+{
+  "veeam-vbr": { "type": "mcp-proxy", "command": "node", "args": ["/opt/vbr-mcp/build/index.js"], "env": { "PRODUCT_NAME": "vbr", "...": "..." } },
+  "veeam-one": { "type": "mcp-proxy", "command": "node", "args": ["/opt/vone-mcp/build/index.js"], "env": { "PRODUCT_NAME": "vone", "...": "..." } }
+}
+```
+
+Their tools surface as `veeam-vbr__…` and `veeam-one__…`. Omit `type` and the
+slug is the type (`{"postgres": {...}}` → the `postgres` built-in), so every
+existing config is unchanged.
 
 ## Layout
 
