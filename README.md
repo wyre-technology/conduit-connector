@@ -11,20 +11,22 @@ agent named there (milestone M-B onward).
 
 ## Install (Linux)
 
-`install.sh` downloads the binary, installs it as a hardened systemd service,
-and starts it. It reads its two settings from the environment, so an RMM can set
-site variables and run it unattended:
+`install.sh` downloads the binary from the latest [GitHub release](https://github.com/wyre-technology/conduit-connector/releases/latest),
+installs it as a hardened systemd service, and starts it. It reads its two
+settings from the environment, so an RMM can set site variables and run it
+unattended:
 
 ```
-RELAY_URL=wss://conduit-wss.wyre.ai \
-ENROLLMENT_TOKEN=<mint in Conduit: site → Deploy connector> \
-bash install.sh
+curl -fsSL https://raw.githubusercontent.com/wyre-technology/conduit-connector/main/install.sh | \
+  RELAY_URL=wss://conduit-wss.wyre.ai \
+  ENROLLMENT_TOKEN=<mint in Conduit: site → Deploy connector> \
+  bash
 ```
 
 Optional: `CONNECTOR_URL` (a direct/signed binary link, e.g. from the Conduit
-wizard) or `CONNECTOR_VERSION` (a GitHub Release tag; default `latest`, plus
-`GH_TOKEN` while the repo is private). Windows service + a signed installer are
-the M-E follow-up.
+wizard) or `CONNECTOR_VERSION` (a GitHub Release tag; default `latest`). The
+Windows amd64 binary in each release is **Authenticode-signed** (Azure Artifact
+Signing); a Windows service wrapper is the M-E follow-up.
 
 ## Run directly (protocol v2)
 
