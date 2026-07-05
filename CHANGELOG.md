@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-05
+
+Windows-service support: the same signed single binary now runs as a native
+Windows service, installed via `install.ps1` — bringing the Windows-heavy
+Sage/MSSQL fleet to parity with the Linux systemd path.
+
 ### Added
 
 - **Windows service support**: the connector runs as a native Windows service (auto-detects the SCM; graceful stop on service Stop/Shutdown; logs to `C:\ProgramData\conduit-connector\logs\`), plus **`install.ps1`** — the Windows counterpart of `install.sh` (downloads the signed `.exe` from the public release, verifies its Authenticode signature, registers the `conduit-connector` service with auto-start + restart-on-failure, sets config in the service registry, starts it). `-Uninstall` removes it.
