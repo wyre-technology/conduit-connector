@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-05
+
+First tagged release of the Go on-prem connector (protocol v2). A single static
+binary that dials out over WSS, enrolls identity-only, and runs cloud-pushed
+connectors — echo, read-only SQL (mssql/postgres/mysql), and `mcp-proxy` (front
+any local MCP server, e.g. Veeam). Ships with a Linux `install.sh` and a signed
+release pipeline.
+
 ### Added
 
 - **Windows code-signing wired into the release (M-E)**: the Release workflow now Authenticode-signs the Windows `.exe` via Azure Artifact Signing (`Azure/trusted-signing-action`) in a `sign-windows` job. Inert until the `SIGNING_CERT_PROFILE` repo variable + `AZURE_*` secrets are set (post identity-validation); until then releases ship the unsigned `.exe` as before. A signing failure blocks the release rather than shipping unsigned.
