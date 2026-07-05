@@ -28,6 +28,31 @@ wizard) or `CONNECTOR_VERSION` (a GitHub Release tag; default `latest`). The
 Windows amd64 binary in each release is **Authenticode-signed** (Azure Artifact
 Signing); a Windows service wrapper is the M-E follow-up.
 
+## Install (Windows)
+
+`install.ps1` is the Windows counterpart of `install.sh`: it downloads the
+signed `conduit-connector-windows-amd64.exe` from the latest [GitHub release](https://github.com/wyre-technology/conduit-connector/releases/latest),
+installs it to `C:\Program Files\conduit-connector\`, registers a
+`conduit-connector` service (auto-start, restart-on-failure), and starts it.
+Run it from an **elevated** PowerShell:
+
+```
+powershell -ExecutionPolicy Bypass -File .\install.ps1 `
+  -RelayUrl wss://conduit-wss.wyre.ai `
+  -EnrollmentToken <mint in Conduit: site → Deploy connector>
+```
+
+Or fetch-and-run in one line:
+
+```
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/wyre-technology/conduit-connector/main/install.ps1 -OutFile $env:TEMP\install.ps1; & $env:TEMP\install.ps1 -RelayUrl wss://conduit-wss.wyre.ai -EnrollmentToken <mint in Conduit>"
+```
+
+The `.exe` is **Authenticode-signed** (Azure Artifact Signing; subject
+`WYRE Technology, LLC`) and the installer verifies the signature before
+installing. Service logs land in `C:\ProgramData\conduit-connector\logs\`.
+`-Uninstall` stops and removes the service.
+
 ## Run directly (protocol v2)
 
 ```

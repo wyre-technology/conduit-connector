@@ -7,6 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/microsoft/go-mssqldb v1.10.0
+	golang.org/x/sys v0.46.0
 )
 
 require (

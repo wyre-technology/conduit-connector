@@ -13,16 +13,22 @@
 //	RELAY_URL         wss:// relay endpoint (production: wss://conduit-wss.wyre.ai)
 //	ENROLLMENT_TOKEN  WYRE-issued identity-only enrollment JWT
 //	LOG_LEVEL         debug|info|warn|error (default info)
+//
+// Runtime targets: a Linux systemd service (see install.sh) and a Windows
+// service (see install.ps1 + service_windows.go). On both, the process is the
+// same static binary; only the service-lifecycle glue is platform-specific
+// (dispatch_windows.go / dispatch_other.go). Run it in a terminal with no
+// service manager and it runs interactively (Ctrl-C to stop).
 package main
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/wyre-technology/conduit-connector/internal/connectors"
 	"github.com/wyre-technology/conduit-connector/internal/tunnel"
@@ -30,14 +36,22 @@ import (
 
 const docsBase = "https://conduit.wyre.ai/docs/guides/onprem"
 
+// main hands off to the platform dispatcher, which decides between running
+// interactively, running under a service manager, or handling a management
+// subcommand (Windows install/uninstall). It returns a process exit code.
 func main() {
-	log := newLogger()
-	slog.SetDefault(log) // so connectors that log (mcp-proxy child stderr) use it
+	os.Exit(dispatchMain())
+}
 
+// run is the core lifecycle, shared by the interactive and service paths:
+// validate config, build the tunnel client, and run until ctx is cancelled
+// (Ctrl-C interactively; a Stop/Shutdown control on Windows) or the client
+// exits with an error. It is the single source of truth for what the
+// connector *does*, so the two entry paths cannot drift.
+func run(ctx context.Context, log *slog.Logger) error {
 	relayURL, token, err := requireEnv()
 	if err != nil {
-		log.Error(err.Error())
-		os.Exit(1)
+		return err
 	}
 
 	registry := connectors.NewRegistry()
@@ -49,15 +63,30 @@ func main() {
 		Logger:          log,
 	})
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	log.Info("conduit-connector ready: dialing " + relayURL)
 	if err := client.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Error("connector stopped", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("connector stopped: %w", err)
 	}
 	log.Info("connector shut down cleanly")
+	return nil
+}
+
+// runInteractive runs the connector in the foreground, cancelling on Ctrl-C
+// (SIGINT) or SIGTERM. This is the path for a terminal, a container, and the
+// Linux systemd unit (systemd delivers SIGTERM on stop).
+func runInteractive(log *slog.Logger) int {
+	ctx, stop := signal.NotifyContext(context.Background(), interactiveSignals()...)
+	defer stop()
+	return exitCode(log, run(ctx, log))
+}
+
+// exitCode logs a non-nil error and maps it to a process exit code.
+func exitCode(log *slog.Logger, err error) int {
+	if err != nil {
+		log.Error(err.Error())
+		return 1
+	}
+	return 0
 }
 
 func requireEnv() (relayURL, token string, err error) {
@@ -87,7 +116,14 @@ func requireEnv() (relayURL, token string, err error) {
 	return relayURL, token, nil
 }
 
-func newLogger() *slog.Logger {
+// newLogger builds the default stdout JSON logger (interactive / systemd,
+// where journald captures stdout).
+func newLogger() *slog.Logger { return newLoggerTo(os.Stdout) }
+
+// newLoggerTo builds a JSON logger writing to w at the env-selected level.
+// The Windows service path uses this to log to a file, since a service has no
+// console to capture stdout.
+func newLoggerTo(w io.Writer) *slog.Logger {
 	level := slog.LevelInfo
 	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
 	case "debug":
@@ -97,5 +133,5 @@ func newLogger() *slog.Logger {
 	case "error":
 		level = slog.LevelError
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level}))
 }
