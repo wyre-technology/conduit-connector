@@ -53,6 +53,12 @@ The `.exe` is **Authenticode-signed** (Azure Artifact Signing; subject
 installing. Service logs land in `C:\ProgramData\conduit-connector\logs\`.
 `-Uninstall` stops and removes the service.
 
+Pass **`-ServiceAccount 'DOMAIN\gmsa$'`** to run the service under a group managed
+service account (gMSA). That identity is what the `mssql` connector uses for
+Windows Integrated Auth (`auth: "integrated"`), letting it reach SQL Server with
+**no SQL credential stored** in Conduit or on the host. This path is new —
+validate it against your gMSA + SQL Server before relying on it.
+
 ## Run directly (protocol v2)
 
 ```
