@@ -41,6 +41,14 @@
 .PARAMETER SkipSignatureCheck
   Skip Authenticode verification. Only for air-gapped / self-provided binaries.
 
+.PARAMETER ServiceAccount
+  Run the Windows service under this account instead of LocalSystem. Use a gMSA
+  as `DOMAIN\gmsaname$` (note the trailing `$`; gMSA passwords are managed by
+  Active Directory, so none is supplied). The gMSA must already be installed on
+  this host (Install-ADServiceAccount) and this host authorized to use it -- that
+  is an AD-admin prerequisite this installer does not perform. Enables `mssql`
+  `auth:integrated` (no stored SQL credential).
+
 .PARAMETER Uninstall
   Stop and remove the service and the install directory (logs are left in
   place), then exit.
@@ -52,6 +60,10 @@
 .EXAMPLE
   # Air-gapped install from a self-provided binary:
   .\install.ps1 -EnrollmentToken '<jwt>' -ConnectorUrl 'https://.../conduit-connector-windows-amd64.exe' -SkipSignatureCheck
+
+.EXAMPLE
+  # Run the service under a gMSA (enables mssql auth:integrated -- no stored SQL credential):
+  .\install.ps1 -EnrollmentToken '<jwt>' -ServiceAccount 'CONTOSO\conduitgmsa$'
 
 .EXAMPLE
   # Remove:
@@ -80,6 +92,9 @@ param(
 
     [Parameter(ParameterSetName = 'Install')]
     [switch]$SkipSignatureCheck,
+
+    [Parameter(ParameterSetName = 'Install')]
+    [string]$ServiceAccount = '',
 
     [Parameter(ParameterSetName = 'Uninstall')]
     [switch]$Uninstall
@@ -233,6 +248,25 @@ try {
         & sc.exe config $ServiceName binPath= $binaryPathName start= auto | Out-Null
         & sc.exe description $ServiceName $Description | Out-Null
         Write-Info "reconfigured existing service $ServiceName"
+    }
+
+    # --- optional: run the service under a specific account instead of LocalSystem ---
+    #     Set only when -ServiceAccount was given; otherwise the create/reconfigure
+    #     above leaves the service as LocalSystem (the unchanged default). This is
+    #     Microsoft's documented gMSA-as-service mechanism: point the service logon
+    #     account at DOMAIN\gmsa$ with an EMPTY password -- Active Directory manages
+    #     the gMSA password, so none is stored here. One sc.exe call is authoritative
+    #     for BOTH branches above (a freshly created service and an in-place upgrade),
+    #     and sc.exe (not a PS 6+ cmdlet) keeps this working on Windows PowerShell 5.1.
+    #     This is what enables the mssql connector's auth:integrated (SSPI): it then
+    #     reaches SQL Server as its own Windows identity with no stored SQL credential.
+    if (-not [string]::IsNullOrWhiteSpace($ServiceAccount)) {
+        & sc.exe config $ServiceName obj= "$ServiceAccount" password= "" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Die "sc.exe config obj= returned $LASTEXITCODE while setting the service account to $ServiceAccount."
+        }
+        Write-Info "service will run as $ServiceAccount (enables mssql auth:integrated -- no stored SQL credential)"
+        Write-Info "if start fails with a logon error, grant the gMSA 'Log on as a service' (SeServiceLogonRight) and confirm this host is authorized to use it (AD-admin: Install-ADServiceAccount)"
     }
 
     # --- write the service environment (REG_MULTI_SZ; admin/SYSTEM-only key -> the

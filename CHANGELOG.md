@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **gMSA / Windows Integrated Auth for `mssql`**: the SQL Server connector accepts `"auth":"integrated"` — no `user`/`password`; it authenticates to SQL Server as its own Windows service identity via SSPI. Run the Windows service under a gMSA (`install.ps1 -ServiceAccount 'DOMAIN\\gmsa$'`) and **no SQL credential is stored anywhere**, in Conduit or on the host. Windows-only; rejected off-Windows. (New — CI-green and reviewed against the driver's auth path, but validate against a real gMSA + SQL Server before production.)
+
 ## [0.2.0] - 2026-07-05
 
 Windows-service support: the same signed single binary now runs as a native
