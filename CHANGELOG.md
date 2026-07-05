@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Fixed `install.ps1 -ServiceAccount` (gMSA)**: setting the service logon account to a gMSA failed with `sc.exe config obj= password= "" -> error 1639` (empty password rejected). Now uses `Win32_Service.Change` (accepts an empty gMSA password cleanly) and auto-grants the account **`SeServiceLogonRight`** via `secedit` (setting the account programmatically doesn't grant it, so the service otherwise couldn't start). Found + fixed via a real Azure AD + gMSA + SQL Server validation: the connector now runs as the gMSA and authenticates to SQL Server as `DOMAIN\gmsa$` (confirmed via `SUSER_SNAME()`), zero stored SQL credentials.
+
 - **gMSA / Windows Integrated Auth for `mssql`**: the SQL Server connector accepts `"auth":"integrated"` — no `user`/`password`; it authenticates to SQL Server as its own Windows service identity via SSPI. Run the Windows service under a gMSA (`install.ps1 -ServiceAccount 'DOMAIN\\gmsa$'`) and **no SQL credential is stored anywhere**, in Conduit or on the host. Windows-only; rejected off-Windows. (New — CI-green and reviewed against the driver's auth path, but validate against a real gMSA + SQL Server before production.)
 
 ## [0.2.0] - 2026-07-05

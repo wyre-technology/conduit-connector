@@ -252,21 +252,50 @@ try {
 
     # --- optional: run the service under a specific account instead of LocalSystem ---
     #     Set only when -ServiceAccount was given; otherwise the create/reconfigure
-    #     above leaves the service as LocalSystem (the unchanged default). This is
-    #     Microsoft's documented gMSA-as-service mechanism: point the service logon
-    #     account at DOMAIN\gmsa$ with an EMPTY password -- Active Directory manages
-    #     the gMSA password, so none is stored here. One sc.exe call is authoritative
-    #     for BOTH branches above (a freshly created service and an in-place upgrade),
-    #     and sc.exe (not a PS 6+ cmdlet) keeps this working on Windows PowerShell 5.1.
-    #     This is what enables the mssql connector's auth:integrated (SSPI): it then
-    #     reaches SQL Server as its own Windows identity with no stored SQL credential.
+    #     above leaves the service as LocalSystem (the unchanged default). For a gMSA
+    #     the logon account is DOMAIN\gmsa$ with NO password -- Active Directory
+    #     manages the gMSA password, so none is stored here.
+    #
+    #     We use the Win32_Service.Change WMI/CIM method (NOT `sc.exe config obj=`):
+    #     `sc.exe config ... password= ""` rejects the empty password with error 1639
+    #     (ERROR_INVALID_COMMAND_LINE). Change() accepts an empty StartPassword
+    #     cleanly and is authoritative for both a freshly created service and an
+    #     in-place upgrade. Win32_Service is available on Windows PowerShell 5.1.
     if (-not [string]::IsNullOrWhiteSpace($ServiceAccount)) {
-        & sc.exe config $ServiceName obj= "$ServiceAccount" password= "" | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Die "sc.exe config obj= returned $LASTEXITCODE while setting the service account to $ServiceAccount."
+        # 1. Grant the account "Log on as a service" (SeServiceLogonRight). Setting
+        #    the logon account programmatically does NOT grant this right (only the
+        #    Services MMC does), so without it the service fails to start.
+        try {
+            $sid = (New-Object System.Security.Principal.NTAccount($ServiceAccount)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+            $tmpInf = Join-Path $env:TEMP ("svclogon-" + [Guid]::NewGuid().ToString('N') + ".inf")
+            $tmpDb  = [IO.Path]::ChangeExtension($tmpInf, 'sdb')
+            & secedit /export /areas USER_RIGHTS /cfg $tmpInf | Out-Null
+            $inf = Get-Content $tmpInf
+            $line = $inf | Where-Object { $_ -match '^SeServiceLogonRight' }
+            if (-not $line) { $line = 'SeServiceLogonRight = *S-1-5-80-0' }
+            if ($line -notmatch [regex]::Escape($sid)) {
+                $newLine = $line.TrimEnd() + ",*$sid"
+                if ($inf -match '^SeServiceLogonRight') {
+                    $inf = $inf | ForEach-Object { if ($_ -match '^SeServiceLogonRight') { $newLine } else { $_ } }
+                } else {
+                    $inf = $inf -replace '(\[Privilege Rights\])', "`$1`r`n$newLine"
+                }
+                Set-Content $tmpInf $inf -Encoding Unicode
+                & secedit /configure /db $tmpDb /cfg $tmpInf /areas USER_RIGHTS | Out-Null
+                Write-Info "granted 'Log on as a service' to $ServiceAccount"
+            }
+            Remove-Item $tmpInf, $tmpDb -ErrorAction SilentlyContinue
+        } catch {
+            Write-Info "could not auto-grant 'Log on as a service' to $ServiceAccount ($($_.Exception.Message)); grant SeServiceLogonRight manually if the service fails to start"
+        }
+
+        # 2. Point the service's logon account at the account (empty password = gMSA).
+        $svcObj = Get-CimInstance Win32_Service -Filter "Name='$ServiceName'"
+        $chg = Invoke-CimMethod -InputObject $svcObj -MethodName Change -Arguments @{ StartName = $ServiceAccount; StartPassword = '' }
+        if ($chg.ReturnValue -ne 0) {
+            Die "setting the service logon account to $ServiceAccount failed (Win32_Service.Change returned $($chg.ReturnValue)). For a gMSA, confirm it is installed on this host (Install-ADServiceAccount) and that the host is authorized to use it."
         }
         Write-Info "service will run as $ServiceAccount (enables mssql auth:integrated -- no stored SQL credential)"
-        Write-Info "if start fails with a logon error, grant the gMSA 'Log on as a service' (SeServiceLogonRight) and confirm this host is authorized to use it (AD-admin: Install-ADServiceAccount)"
     }
 
     # --- write the service environment (REG_MULTI_SZ; admin/SYSTEM-only key -> the
