@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`http-bridge` built-in connector**: forwards `http/forward` JSON-RPC
+  payloads from the tunnel to LAN HTTP hosts on a cloud-pushed allowlist
+  (component-wise URL matching — scheme/host/port/path-prefix). Per-host TLS
+  trust (`caCertPem` or `insecureSkipVerify`), hop-by-hop header stripping,
+  redirects returned not followed, 10 MiB response cap. Powers on-prem
+  ConnectWise Manage/Automate and IT Glue support without running vendor
+  code on the customer box.
+
 ## [0.3.0] - 2026-07-05
 
 gMSA / Windows Integrated Auth for SQL Server — the "zero stored SQL

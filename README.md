@@ -84,6 +84,7 @@ Compiled in — no plugins, no sidecars. Enabled per-site via cloud-pushed confi
 | `postgres` | Read-only PostgreSQL — same three tools. |
 | `mysql` | Read-only MySQL/MariaDB — same three tools. |
 | `mcp-proxy` | Fronts any local stdio MCP server (e.g. the Veeam MCP server): spawns `{command, args, env, cwd}`, does the MCP handshake, forwards its tools. |
+| `http-bridge` | Forwards HTTP requests from cloud vendor MCP containers to allowlisted LAN hosts (`{hosts: [{baseUrl, caCertPem?, insecureSkipVerify?}]}`) — per-host TLS trust, no redirects, 10MiB response cap. No user-facing tools. |
 
 The SQL connectors share `internal/connectors/sqlcommon` (one read-only MCP +
 query implementation; each driver package is just its DSN + placeholder style).
