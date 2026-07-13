@@ -20,14 +20,18 @@
 package httpbridge
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
+	"time"
 )
 
 // HostConfig is one allowlisted LAN base URL plus its TLS trust settings.
@@ -129,4 +133,144 @@ func (c *Connector) allowedFor(rawURL string) (*hostEntry, error) {
 		return &c.hosts[i], nil
 	}
 	return nil, fmt.Errorf("url %q is not on the allowlist", rawURL)
+}
+
+const (
+	maxResponseBytes = 10 << 20 // stay under the 16MiB tunnel frame limit post-base64
+	defaultTimeout   = 25 * time.Second
+)
+
+type rpcRequest struct {
+	ID     json.RawMessage `json:"id"`
+	Method string          `json:"method"`
+	Params struct {
+		Method    string            `json:"method"`
+		URL       string            `json:"url"`
+		Headers   map[string]string `json:"headers"`
+		BodyB64   string            `json:"bodyB64"`
+		TimeoutMs int               `json:"timeoutMs"`
+	} `json:"params"`
+}
+
+// hop-by-hop headers are connection-scoped and must not be forwarded.
+var hopByHop = map[string]bool{
+	"Connection": true, "Keep-Alive": true, "Proxy-Authenticate": true,
+	"Proxy-Authorization": true, "Te": true, "Trailer": true,
+	"Transfer-Encoding": true, "Upgrade": true, "Host": true,
+}
+
+// Handle processes one JSON-RPC request. `http/forward` does the work;
+// initialize/tools/list are answered minimally so the gateway's capability
+// fan-out sees a well-formed, tool-less server (the bridge has no user tools).
+func (c *Connector) Handle(ctx context.Context, payload json.RawMessage) (json.RawMessage, error) {
+	var req rpcRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("http-bridge: payload is not JSON-RPC shaped: %w", err)
+	}
+	id := req.ID
+	if id == nil {
+		id = json.RawMessage("null")
+	}
+
+	switch req.Method {
+	case "initialize":
+		return marshal(map[string]any{
+			"jsonrpc": "2.0", "id": id,
+			"result": map[string]any{
+				"protocolVersion": "2024-11-05",
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "onprem-http-bridge", "version": "1.0.0"},
+			},
+		})
+	case "tools/list":
+		return marshal(map[string]any{
+			"jsonrpc": "2.0", "id": id,
+			"result": map[string]any{"tools": []any{}},
+		})
+	case "http/forward":
+		return c.forward(ctx, id, &req)
+	default:
+		return marshal(map[string]any{
+			"jsonrpc": "2.0", "id": id,
+			"error": map[string]any{"code": -32601, "message": "Method not found: " + req.Method},
+		})
+	}
+}
+
+func (c *Connector) forward(ctx context.Context, id json.RawMessage, req *rpcRequest) (json.RawMessage, error) {
+	p := req.Params
+	if p.Method == "" || p.URL == "" {
+		return rpcError(id, -32602, "http/forward requires method and url params")
+	}
+	host, err := c.allowedFor(p.URL)
+	if err != nil {
+		return rpcError(id, -32000, err.Error())
+	}
+
+	var body io.Reader
+	if p.BodyB64 != "" {
+		raw, err := base64.StdEncoding.DecodeString(p.BodyB64)
+		if err != nil {
+			return rpcError(id, -32602, "bodyB64 is not valid base64")
+		}
+		body = strings.NewReader(string(raw))
+	}
+
+	timeout := defaultTimeout
+	if p.TimeoutMs > 0 && time.Duration(p.TimeoutMs)*time.Millisecond < timeout {
+		timeout = time.Duration(p.TimeoutMs) * time.Millisecond
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(reqCtx, p.Method, p.URL, body)
+	if err != nil {
+		return rpcError(id, -32602, "http/forward: bad method or url: "+err.Error())
+	}
+	for k, v := range p.Headers {
+		if !hopByHop[http.CanonicalHeaderKey(k)] {
+			httpReq.Header.Set(k, v)
+		}
+	}
+
+	resp, err := host.client.Do(httpReq)
+	if err != nil {
+		return rpcError(id, -32000, "http/forward: request failed: "+err.Error())
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return rpcError(id, -32000, "http/forward: reading response failed: "+err.Error())
+	}
+	if len(respBody) > maxResponseBytes {
+		return rpcError(id, -32000, "http/forward: response exceeds 10MiB limit")
+	}
+
+	headers := map[string]string{}
+	for k, vs := range resp.Header {
+		if !hopByHop[k] {
+			headers[k] = strings.Join(vs, ", ")
+		}
+	}
+	return marshal(map[string]any{
+		"jsonrpc": "2.0", "id": id,
+		"result": map[string]any{
+			"status":  resp.StatusCode,
+			"headers": headers,
+			"bodyB64": base64.StdEncoding.EncodeToString(respBody),
+		},
+	})
+}
+
+func rpcError(id json.RawMessage, code int, message string) (json.RawMessage, error) {
+	return marshal(map[string]any{
+		"jsonrpc": "2.0", "id": id,
+		"error": map[string]any{"code": code, "message": message},
+	})
+}
+
+func marshal(v any) (json.RawMessage, error) {
+	b, err := json.Marshal(v)
+	return json.RawMessage(b), err
 }
