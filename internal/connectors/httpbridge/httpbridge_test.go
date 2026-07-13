@@ -65,15 +65,18 @@ func TestAllowlistMatching(t *testing.T) {
 	}
 
 	refused := []string{
-		"https://cw.customer.local.evil.com/x",                 // suffix-extended host
-		"http://cw.customer.local/x",                           // scheme downgrade
-		"https://cw.customer.local:8080/x",                     // wrong port
-		"https://evil.com/https://cw.customer.local",           // host mismatch
-		"https://apps.customer.local:8443/itglue2/x",           // path prefix without segment boundary
-		"https://apps.customer.local:8443/other",               // outside path prefix
-		"https://apps.customer.local/itglue/x",                 // missing required port
-		"https://apps.customer.local:8443/itglue/../other",     // path traversal attack with dot-segments
-		"https://apps.customer.local:8443/itglue/%2e%2e/other", // path traversal with URL-encoded dots
+		"https://cw.customer.local.evil.com/x",                        // suffix-extended host
+		"http://cw.customer.local/x",                                  // scheme downgrade
+		"https://cw.customer.local:8080/x",                            // wrong port
+		"https://evil.com/https://cw.customer.local",                  // host mismatch
+		"https://apps.customer.local:8443/itglue2/x",                  // path prefix without segment boundary
+		"https://apps.customer.local:8443/other",                      // outside path prefix
+		"https://apps.customer.local/itglue/x",                        // missing required port
+		"https://apps.customer.local:8443/itglue/../other",            // path traversal attack with dot-segments
+		"https://apps.customer.local:8443/itglue/%2e%2e/other",        // path traversal with URL-encoded dots
+		"https://apps.customer.local:8443/itglue2/..%2fitglue/x",      // encoded-slash escape: decoded path looks in-prefix, wire path is not
+		"https://apps.customer.local:8443/itglue/x%2f..%2f..%2fother", // encoded slashes generally
+		"https://apps.customer.local:8443/itglue/x%5c..%5cother",      // encoded backslash
 		"not a url",
 	}
 	for _, u := range refused {

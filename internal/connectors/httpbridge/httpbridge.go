@@ -115,6 +115,16 @@ func (c *Connector) allowedFor(rawURL string) (*hostEntry, error) {
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("url %q is not an absolute URL", rawURL)
 	}
+	// An encoded slash/backslash in the raw path lets the wire path diverge
+	// from the decoded path we match on: url.Parse decodes %2f into a "/"
+	// for our path.Clean check, but http.NewRequestWithContext forwards the
+	// RAW %2f verbatim, and origin servers that don't treat %2f as a
+	// separator would route the request outside the allowlisted path prefix.
+	// Reject rather than try to reconcile the two encodings.
+	if esc := u.EscapedPath(); strings.Contains(esc, "%2f") || strings.Contains(esc, "%2F") ||
+		strings.Contains(esc, "%5c") || strings.Contains(esc, "%5C") {
+		return nil, fmt.Errorf("url %q contains an encoded path separator", rawURL)
+	}
 	// Normalize dot-segments in the request path to prevent traversal attacks.
 	reqPath := path.Clean(u.Path)
 	if reqPath == "." || reqPath == "" {
@@ -137,7 +147,10 @@ func (c *Connector) allowedFor(rawURL string) (*hostEntry, error) {
 
 const (
 	maxResponseBytes = 10 << 20 // stay under the 16MiB tunnel frame limit post-base64
-	defaultTimeout   = 25 * time.Second
+	// defaultTimeout is a HARD CEILING, not just a default: a larger
+	// timeoutMs param is intentionally clamped down to it (see forward()
+	// below) because Phase 2b's egress hop must not expect >25s.
+	defaultTimeout = 25 * time.Second
 )
 
 type rpcRequest struct {
@@ -250,6 +263,8 @@ func (c *Connector) forward(ctx context.Context, id json.RawMessage, req *rpcReq
 	headers := map[string]string{}
 	for k, vs := range resp.Header {
 		if !hopByHop[k] {
+			// TODO: Set-Cookie needs []string preservation — comma-join corrupts
+			// multi-cookie responses (fine for the API-key/basic-auth launch vendors).
 			headers[k] = strings.Join(vs, ", ")
 		}
 	}
