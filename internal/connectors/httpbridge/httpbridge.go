@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -110,6 +111,11 @@ func (c *Connector) allowedFor(rawURL string) (*hostEntry, error) {
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("url %q is not an absolute URL", rawURL)
 	}
+	// Normalize dot-segments in the request path to prevent traversal attacks.
+	reqPath := path.Clean(u.Path)
+	if reqPath == "." || reqPath == "" {
+		reqPath = "/"
+	}
 	for i := range c.hosts {
 		b := c.hosts[i].base
 		if u.Scheme != b.Scheme || !strings.EqualFold(u.Hostname(), b.Hostname()) ||
@@ -117,7 +123,7 @@ func (c *Connector) allowedFor(rawURL string) (*hostEntry, error) {
 			continue
 		}
 		basePath := strings.TrimSuffix(b.Path, "/")
-		if basePath != "" && u.Path != basePath && !strings.HasPrefix(u.Path, basePath+"/") {
+		if basePath != "" && reqPath != basePath && !strings.HasPrefix(reqPath, basePath+"/") {
 			continue
 		}
 		return &c.hosts[i], nil

@@ -49,6 +49,7 @@ func TestAllowlistMatching(t *testing.T) {
 		"https://cw.customer.local:443/anything", // explicit default port == implicit
 		"https://apps.customer.local:8443/itglue/organizations",
 		"https://apps.customer.local:8443/itglue", // exact path == prefix
+		"https://apps.customer.local:8443/itglue/a/../b", // dot-segments within prefix are normalized away
 	}
 	for _, u := range allowed {
 		if _, err := c.allowedFor(u); err != nil {
@@ -64,6 +65,8 @@ func TestAllowlistMatching(t *testing.T) {
 		"https://apps.customer.local:8443/itglue2/x", // path prefix without segment boundary
 		"https://apps.customer.local:8443/other",     // outside path prefix
 		"https://apps.customer.local/itglue/x",       // missing required port
+		"https://apps.customer.local:8443/itglue/../other", // path traversal attack with dot-segments
+		"https://apps.customer.local:8443/itglue/%2e%2e/other", // path traversal with URL-encoded dots
 		"not a url",
 	}
 	for _, u := range refused {
