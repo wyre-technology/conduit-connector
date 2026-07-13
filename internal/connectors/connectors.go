@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/wyre-technology/conduit-connector/internal/connectors/echo"
+	"github.com/wyre-technology/conduit-connector/internal/connectors/httpbridge"
 	"log/slog"
 
 	"github.com/wyre-technology/conduit-connector/internal/connectors/mcpproxy"
@@ -41,6 +42,13 @@ var builtins = map[string]factory{
 		return func(_ context.Context, payload json.RawMessage) (json.RawMessage, error) {
 			return echo.Handle(payload)
 		}, nil
+	},
+	"http-bridge": func(cfg json.RawMessage) (Handler, error) {
+		c, err := httpbridge.New(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return c.Handle, nil
 	},
 	"mssql": func(cfg json.RawMessage) (Handler, error) {
 		c, err := mssql.New(cfg)
