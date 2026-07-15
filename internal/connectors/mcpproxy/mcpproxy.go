@@ -213,7 +213,7 @@ func (ch *child) stderrSuffix() string {
 }
 
 func (ch *child) initialize(ctx context.Context) error {
-	initReq := json.RawMessage(`{"jsonrpc":"2.0","id":"conduit-init","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"conduit-connector","version":"1.0.0"}}}`)
+	initReq := json.RawMessage(`{"jsonrpc":"2.0","id":"conduit-init","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"conduit-tunnel","version":"1.0.0"}}}`)
 	if _, err := ch.roundTrip(ctx, initReq, json.RawMessage(`"conduit-init"`), initializeTimeout); err != nil {
 		return err
 	}

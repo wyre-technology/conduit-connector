@@ -11,7 +11,7 @@ import (
 
 // windowsService adapts the shared run() lifecycle to the Windows Service
 // Control Manager: it starts run() in a goroutine and translates the SCM's
-// Stop/Shutdown controls into a context cancel, so the connector unwinds the
+// Stop/Shutdown controls into a context cancel, so the tunnel unwinds the
 // same way it does on Ctrl-C / systemd SIGTERM.
 type windowsService struct {
 	log  *slog.Logger
@@ -60,7 +60,7 @@ func (s *windowsService) Execute(_ []string, r <-chan svc.ChangeRequest, changes
 			// installer's restart-on-crash recovery intentionally does NOT
 			// relaunch it — a bad config must not loop-restart every 5s.
 			if err != nil {
-				s.log.Error("connector exited: " + err.Error())
+				s.log.Error("tunnel exited: " + err.Error())
 				s.exit = 1
 				return true, 1 // svcSpecificEC=true so the exit code is surfaced
 			}

@@ -1,4 +1,4 @@
-/conduit-connector
-/conduit-connector-*
+/conduit-tunnel
+/conduit-tunnel-*
 /dist/
-/conduit-connector.exe
+/conduit-tunnel.exe

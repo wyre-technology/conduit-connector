@@ -19,14 +19,14 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/wyre-technology/conduit-connector/internal/connectors/echo"
-	"github.com/wyre-technology/conduit-connector/internal/connectors/httpbridge"
+	"github.com/wyre-technology/conduit-tunnel/internal/connectors/echo"
+	"github.com/wyre-technology/conduit-tunnel/internal/connectors/httpbridge"
 	"log/slog"
 
-	"github.com/wyre-technology/conduit-connector/internal/connectors/mcpproxy"
-	"github.com/wyre-technology/conduit-connector/internal/connectors/mssql"
-	"github.com/wyre-technology/conduit-connector/internal/connectors/mysql"
-	"github.com/wyre-technology/conduit-connector/internal/connectors/postgres"
+	"github.com/wyre-technology/conduit-tunnel/internal/connectors/mcpproxy"
+	"github.com/wyre-technology/conduit-tunnel/internal/connectors/mssql"
+	"github.com/wyre-technology/conduit-tunnel/internal/connectors/mysql"
+	"github.com/wyre-technology/conduit-tunnel/internal/connectors/postgres"
 )
 
 // Handler serves one inbound tunnel request for an enabled connector.

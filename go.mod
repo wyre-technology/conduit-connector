@@ -1,4 +1,4 @@
-module github.com/wyre-technology/conduit-connector
+module github.com/wyre-technology/conduit-tunnel
 
 go 1.26.4
 

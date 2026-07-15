@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Repo/binary rename: `conduit-connector` → `conduit-tunnel`**. The
+  product is now called "Tunnel"; this repo, its Go module path
+  (`github.com/wyre-technology/conduit-tunnel`), the compiled binary, the
+  Windows service name (`conduit-tunnel`), install paths
+  (`C:\Program Files\conduit-tunnel\`, `/usr/local/bin/conduit-tunnel`), and
+  log directories (`C:\ProgramData\conduit-tunnel\logs\`,
+  `/etc/conduit-tunnel`) all move to the new name. Release asset names
+  become `conduit-tunnel-{linux-amd64,linux-arm64,windows-amd64.exe}`.
+  Installer parameter/env-var names (`-EnrollmentToken`/`-RelayUrl`/
+  `-Version`; `RELAY_URL`/`ENROLLMENT_TOKEN`/`CONNECTOR_VERSION`) and the
+  `WYRE Technology` Authenticode signer subject are unchanged. Built-in
+  data-source connectors (`mssql`, `postgres`, `mysql`, `http-bridge`,
+  `mcp-proxy`, `echo`) keep the "connector" sub-concept name — only the
+  repo/binary/product identity changes. Tags v0.1.0–v0.3.0 remain
+  `conduit-connector` releases and are not renamed.
+
 ### Added
 
 - **`http-bridge` built-in connector**: forwards `http/forward` JSON-RPC

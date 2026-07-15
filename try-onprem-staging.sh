@@ -21,7 +21,7 @@ ORG="L-Fk69VfrntBjgVxOvWJX"                    # "WYRE Technology" staging org
 USER_SUB="auth0|6a086bde989966bddbc05911"      # its primary (oldest) member
 GATEWAY="https://staging.conduit.wyre.ai"
 RELAY="wss://staging-wss.conduit.wyre.ai"
-BIN="$(cd "$(dirname "$0")" && pwd)/conduit-connector"   # the darwin binary next to this script
+BIN="$(cd "$(dirname "$0")" && pwd)/conduit-tunnel"   # the darwin binary next to this script
 
 KEEP=0; HTTP_BRIDGE=0
 for arg in "$@"; do
@@ -205,7 +205,7 @@ done
 tail -n "+$((LOG_MARK + 1))" "$LOG" | grep "config applied" | tail -1
 echo "   ^ expect: msg=\"config applied\" ... applied=\"[echo http-bridge]\" (order may vary) error=<nil>"
 echo "     If 'applied' is missing http-bridge, the connector binary predates"
-echo "     the http-bridge built-in (need conduit-connector >= v0.4.0) — rebuild"
+echo "     the http-bridge built-in (need conduit-tunnel >= v0.4.0) — rebuild"
 echo "     \$BIN from this branch (feat/http-bridge) or a >=0.4.0 release."
 
 say "7/7b saving a TUNNEL-MODE IT Glue connection (egressMode=tunnel, lanBaseUrl=the stub)"

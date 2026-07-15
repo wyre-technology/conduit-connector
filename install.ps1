@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-  conduit-connector installer (Windows). Downloads the signed binary, installs
+  conduit-tunnel installer (Windows). Downloads the signed binary, installs
   it as a Windows service (LocalSystem, automatic start), and starts it.
-  Outbound-only -- opens no inbound port; the connector dials the WYRE relay
+  Outbound-only -- opens no inbound port; the agent dials the WYRE relay
   over an outbound WSS tunnel.
 
 .DESCRIPTION
@@ -19,7 +19,7 @@
   install.sh's chmod 600 on the Linux env file.
 
   The binary writes its own logs to
-  C:\ProgramData\conduit-connector\logs\conduit-connector.log.
+  C:\ProgramData\conduit-tunnel\logs\conduit-tunnel.log.
 
 .PARAMETER EnrollmentToken
   The identity-only enrollment JWT minted in Conduit (site -> Deploy connector).
@@ -35,7 +35,7 @@
   GitHub Release tag to pull the signed binary from. Default: latest.
 
 .PARAMETER ConnectorUrl
-  Direct URL to the connector .exe (air-gapped / self-provided override). If
+  Direct URL to the tunnel .exe (air-gapped / self-provided override). If
   set, it is used instead of the GitHub Release URL.
 
 .PARAMETER SkipSignatureCheck
@@ -59,7 +59,7 @@
 
 .EXAMPLE
   # Air-gapped install from a self-provided binary:
-  .\install.ps1 -EnrollmentToken '<jwt>' -ConnectorUrl 'https://.../conduit-connector-windows-amd64.exe' -SkipSignatureCheck
+  .\install.ps1 -EnrollmentToken '<jwt>' -ConnectorUrl 'https://.../conduit-tunnel-windows-amd64.exe' -SkipSignatureCheck
 
 .EXAMPLE
   # Run the service under a gMSA (enables mssql auth:integrated -- no stored SQL credential):
@@ -104,14 +104,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # --- constants (keep in lockstep with dispatch_windows.go / the LOCKED contract) ---
-$ServiceName = 'conduit-connector'
-$DisplayName = 'Conduit on-prem connector'
+$ServiceName = 'conduit-tunnel'
+$DisplayName = 'Conduit on-prem tunnel'
 $Description = 'Reaches on-prem systems through Conduit over an outbound-only WSS tunnel. Binds no inbound port.'
-$Repo        = 'wyre-technology/conduit-connector'
-$Asset       = 'conduit-connector-windows-amd64.exe'
-$InstallDir  = Join-Path $env:ProgramFiles 'conduit-connector'          # C:\Program Files\conduit-connector
-$BinPath     = Join-Path $InstallDir 'conduit-connector.exe'
-$LogPath     = Join-Path $env:ProgramData 'conduit-connector\logs\conduit-connector.log'
+$Repo        = 'wyre-technology/conduit-tunnel'
+$Asset       = 'conduit-tunnel-windows-amd64.exe'
+$InstallDir  = Join-Path $env:ProgramFiles 'conduit-tunnel'          # C:\Program Files\conduit-tunnel
+$BinPath     = Join-Path $InstallDir 'conduit-tunnel.exe'
+$LogPath     = Join-Path $env:ProgramData 'conduit-tunnel\logs\conduit-tunnel.log'
 $RegPath     = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"    # per-service Environment lives here
 
 # --- tiny helpers (mirror install.sh's "install: ..." / die) ---
@@ -174,7 +174,7 @@ catch { }
 # --- resolve the download URL ---
 if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
     $url = $ConnectorUrl
-    Write-Info "downloading connector binary (direct URL)"
+    Write-Info "downloading tunnel binary (direct URL)"
 }
 elseif ($Version -eq 'latest') {
     $url = "https://github.com/$Repo/releases/latest/download/$Asset"
@@ -188,9 +188,9 @@ else {
 $tmpDir = $null
 try {
     # --- fetch to a temp dir (once) ---
-    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("conduit-connector-" + [Guid]::NewGuid().ToString('N'))
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("conduit-tunnel-" + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
-    $tmpExe = Join-Path $tmpDir 'conduit-connector.exe'
+    $tmpExe = Join-Path $tmpDir 'conduit-tunnel.exe'
 
     try {
         Invoke-WebRequest -Uri $url -OutFile $tmpExe -UseBasicParsing
@@ -333,7 +333,7 @@ finally {
     }
 }
 
-Write-Info "done. The connector is running and dialing $RelayUrl."
+Write-Info "done. The tunnel is running and dialing $RelayUrl."
 Write-Info "logs:   $LogPath"
 Write-Info "status: Get-Service $ServiceName"
 exit 0
