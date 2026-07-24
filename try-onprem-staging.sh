@@ -59,7 +59,7 @@ JWT_SECRET=$(az containerapp secret show -n conduit-prod-staging-gateway -g rg-c
 [ -n "$ADMIN_KEY" ] && [ -n "$JWT_SECRET" ] || { echo "could not read staging secrets — are you az-logged-in to the right subscription?"; exit 1; }
 
 say "2/5  minting an IDENTITY-ONLY enrollment token (the v2 model: no capabilities in the token)"
-TOKEN=$(curl -s -X POST "$GATEWAY/admin/onprem/enrollment-token" \
+TOKEN=$(curl -s -X POST "$GATEWAY/admin/tunnel/enrollment-token" \
   -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
   -d "{\"subtenantId\":\"$ORG\",\"ttlSeconds\":900}" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); print('capabilities in token:', d['capabilities'], file=sys.stderr); print(d['token'])")
@@ -90,7 +90,7 @@ grep "tunnel registered" "$LOG" | tail -1
 echo "   ^ online, ZERO capabilities — waiting for Conduit to push config"
 
 say "4/5  pushing connector config from Conduit (this is what the wizard will do)"
-curl -s -X PUT "$GATEWAY/admin/onprem/config" \
+curl -s -X PUT "$GATEWAY/admin/tunnel/config" \
   -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
   -d "{\"subtenantId\":\"$ORG\",\"connectors\":{\"echo\":{}}}" | python3 -m json.tool
 for _ in $(seq 1 15); do grep -q "config applied" "$LOG" && break; sleep 1; done
@@ -194,7 +194,7 @@ echo "   stub listening on http://127.0.0.1:$STUB_PORT — requests logged to $S
 
 say "7/7a pushing http-bridge config: the stub is now this site's ONLY allowlisted host"
 LOG_MARK=$(wc -l < "$LOG")
-curl -s -X PUT "$GATEWAY/admin/onprem/config" \
+curl -s -X PUT "$GATEWAY/admin/tunnel/config" \
   -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
   -d "{\"subtenantId\":\"$ORG\",\"connectors\":{\"echo\":{},\"http-bridge\":{\"hosts\":[{\"baseUrl\":\"http://127.0.0.1:$STUB_PORT\",\"insecureSkipVerify\":true}]}}}" \
   | python3 -m json.tool
