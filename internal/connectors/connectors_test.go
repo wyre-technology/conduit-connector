@@ -79,3 +79,38 @@ func TestApplyUnknownTypeAndSlugErrors(t *testing.T) {
 		t.Fatalf("want no-built-in-connector error, got %v", err)
 	}
 }
+
+func TestApplyHTTPBridge(t *testing.T) {
+	r := NewRegistry()
+	applied, err := r.Apply(context.Background(), 1, map[string]json.RawMessage{
+		"http-bridge": json.RawMessage(`{"hosts":[{"baseUrl":"https://cw.example.local"}]}`),
+	})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(applied) != 1 || applied[0] != "http-bridge" {
+		t.Fatalf("applied = %v", applied)
+	}
+	// tools/list must be empty — the bridge exposes no user-facing tools.
+	out, err := r.Handle(context.Background(), "http-bridge",
+		json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if !strings.Contains(string(out), `"tools":[]`) {
+		t.Errorf("expected empty tools, got %s", out)
+	}
+}
+
+func TestApplyHTTPBridgeRejectsBadConfig(t *testing.T) {
+	r := NewRegistry()
+	applied, err := r.Apply(context.Background(), 1, map[string]json.RawMessage{
+		"http-bridge": json.RawMessage(`{"hosts":[{"baseUrl":"not-a-url"}]}`),
+	})
+	if err == nil {
+		t.Fatal("expected config rejection error")
+	}
+	if len(applied) != 0 {
+		t.Fatalf("bad config must not apply, got %v", applied)
+	}
+}

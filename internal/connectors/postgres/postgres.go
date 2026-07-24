@@ -17,7 +17,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/wyre-technology/conduit-connector/internal/connectors/sqlcommon"
+	"github.com/wyre-technology/conduit-tunnel/internal/connectors/sqlcommon"
 )
 
 // Config is the pushed per-site connector config.

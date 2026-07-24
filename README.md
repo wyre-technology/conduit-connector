@@ -1,6 +1,6 @@
-# conduit-connector
+# conduit-tunnel
 
-The Conduit on-prem connector — a single-binary Go agent that dials **out** over
+The Conduit on-prem tunnel — a single-binary Go agent that dials **out** over
 WSS and bridges on-prem systems (Sage 100/MSSQL, Veeam, …) into
 [Conduit](https://conduit.wyre.ai). It binds **no inbound port**: as long as
 outbound 443 works, the site is connected. No firewall holes, ever.
@@ -11,13 +11,13 @@ agent named there (milestone M-B onward).
 
 ## Install (Linux)
 
-`install.sh` downloads the binary from the latest [GitHub release](https://github.com/wyre-technology/conduit-connector/releases/latest),
+`install.sh` downloads the binary from the latest [GitHub release](https://github.com/wyre-technology/conduit-tunnel/releases/latest),
 installs it as a hardened systemd service, and starts it. It reads its two
 settings from the environment, so an RMM can set site variables and run it
 unattended:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/wyre-technology/conduit-connector/main/install.sh | \
+curl -fsSL https://raw.githubusercontent.com/wyre-technology/conduit-tunnel/main/install.sh | \
   RELAY_URL=wss://conduit-wss.wyre.ai \
   ENROLLMENT_TOKEN=<mint in Conduit: site → Deploy connector> \
   bash
@@ -31,9 +31,9 @@ Signing); a Windows service wrapper is the M-E follow-up.
 ## Install (Windows)
 
 `install.ps1` is the Windows counterpart of `install.sh`: it downloads the
-signed `conduit-connector-windows-amd64.exe` from the latest [GitHub release](https://github.com/wyre-technology/conduit-connector/releases/latest),
-installs it to `C:\Program Files\conduit-connector\`, registers a
-`conduit-connector` service (auto-start, restart-on-failure), and starts it.
+signed `conduit-tunnel-windows-amd64.exe` from the latest [GitHub release](https://github.com/wyre-technology/conduit-tunnel/releases/latest),
+installs it to `C:\Program Files\conduit-tunnel\`, registers a
+`conduit-tunnel` service (auto-start, restart-on-failure), and starts it.
 Run it from an **elevated** PowerShell:
 
 ```
@@ -45,12 +45,12 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 `
 Or fetch-and-run in one line:
 
 ```
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/wyre-technology/conduit-connector/main/install.ps1 -OutFile $env:TEMP\install.ps1; & $env:TEMP\install.ps1 -RelayUrl wss://conduit-wss.wyre.ai -EnrollmentToken <mint in Conduit>"
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/wyre-technology/conduit-tunnel/main/install.ps1 -OutFile $env:TEMP\install.ps1; & $env:TEMP\install.ps1 -RelayUrl wss://conduit-wss.wyre.ai -EnrollmentToken <mint in Conduit>"
 ```
 
 The `.exe` is **Authenticode-signed** (Azure Artifact Signing; subject
 `WYRE Technology, LLC`) and the installer verifies the signature before
-installing. Service logs land in `C:\ProgramData\conduit-connector\logs\`.
+installing. Service logs land in `C:\ProgramData\conduit-tunnel\logs\`.
 `-Uninstall` stops and removes the service.
 
 Pass **`-ServiceAccount 'DOMAIN\gmsa$'`** to run the service under a group managed
@@ -64,13 +64,13 @@ validate it against your gMSA + SQL Server before relying on it.
 ```
 RELAY_URL=wss://conduit-wss.wyre.ai \
 ENROLLMENT_TOKEN=<identity-only token minted in Conduit> \
-./conduit-connector
+./conduit-tunnel
 ```
 
 Enrollment is **identity-only** — the token binds the org, not capabilities.
-The connector comes online empty; Conduit pushes which connectors to run and
+The tunnel comes online empty; Conduit pushes which connectors to run and
 their config over the tunnel (the wizard, or the admin API). There is **no
-`CAPABILITIES` env var** — the connector boot-fails if it is set (that was the
+`CAPABILITIES` env var** — the tunnel boot-fails if it is set (that was the
 legacy v1 container). Boot otherwise refuses loudly on missing/invalid config.
 
 ## Built-in connectors
@@ -84,6 +84,7 @@ Compiled in — no plugins, no sidecars. Enabled per-site via cloud-pushed confi
 | `postgres` | Read-only PostgreSQL — same three tools. |
 | `mysql` | Read-only MySQL/MariaDB — same three tools. |
 | `mcp-proxy` | Fronts any local stdio MCP server (e.g. the Veeam MCP server): spawns `{command, args, env, cwd}`, does the MCP handshake, forwards its tools. |
+| `http-bridge` | Forwards HTTP requests from cloud vendor MCP containers to allowlisted LAN hosts (`{hosts: [{baseUrl, caCertPem?, insecureSkipVerify?}]}`) — per-host TLS trust, no redirects, 10MiB response cap. No user-facing tools. |
 
 The SQL connectors share `internal/connectors/sqlcommon` (one read-only MCP +
 query implementation; each driver package is just its DSN + placeholder style).
@@ -108,7 +109,7 @@ existing config is unchanged.
 
 ## Layout
 
-- `cmd/conduit-connector` — entry point, env guards, service lifecycle
+- `cmd/conduit-tunnel` — entry point, env guards, service lifecycle
 - `internal/tunnel` — frame protocol (v1 + v2) + WSS client: dial, register,
   heartbeat (30s), reconnect (1s→30s backoff), request dispatch, config apply.
 - `internal/connectors` — the built-in connectors + the config-driven registry.
@@ -116,11 +117,11 @@ existing config is unchanged.
 ## Development
 
 ```
-go build -o conduit-connector ./cmd/conduit-connector   # ~9 MB static binary
+go build -o conduit-tunnel ./cmd/conduit-tunnel   # ~9 MB static binary
 go test ./...
 ```
 
 First light: 2026-07-02 — this agent registered against the production relay
 and carried a full `/v1/mcp` echo round-trip
-(`gateway → relay → WSS → connector → echo → back`) on the day the tunnels
+(`gateway → relay → WSS → tunnel → echo → back`) on the day the tunnels
 went live in prod.

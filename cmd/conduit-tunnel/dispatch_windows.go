@@ -12,7 +12,7 @@ import (
 
 // serviceName is the Windows service name install.ps1 registers this binary
 // under. Keep it in lockstep with install.ps1.
-const serviceName = "conduit-connector"
+const serviceName = "conduit-tunnel"
 
 // dispatchMain (Windows): if the process was started by the Service Control
 // Manager, run under the SCM control handler (service_windows.go); otherwise
@@ -55,15 +55,15 @@ func runService() int {
 	return h.exit
 }
 
-// newServiceLogger writes JSON logs to %ProgramData%\conduit-connector\logs\
-// conduit-connector.log. If that can't be opened, it falls back to the stdout
+// newServiceLogger writes JSON logs to %ProgramData%\conduit-tunnel\logs\
+// conduit-tunnel.log. If that can't be opened, it falls back to the stdout
 // logger (void under the SCM, but never fatal).
 func newServiceLogger() *slog.Logger {
-	dir := filepath.Join(programData(), "conduit-connector", "logs")
+	dir := filepath.Join(programData(), "conduit-tunnel", "logs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return newLogger()
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "conduit-connector.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(filepath.Join(dir, "conduit-tunnel.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return newLogger()
 	}

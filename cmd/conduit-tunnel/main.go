@@ -1,4 +1,4 @@
-// conduit-connector — the Conduit on-prem connector agent.
+// conduit-tunnel — the Conduit on-prem tunnel agent.
 //
 // Dials OUT over WSS to the Conduit relay; binds no inbound port. Boot
 // guards mirror conduit's src/onprem/index.ts six-guard discipline: any
@@ -30,8 +30,8 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/wyre-technology/conduit-connector/internal/connectors"
-	"github.com/wyre-technology/conduit-connector/internal/tunnel"
+	"github.com/wyre-technology/conduit-tunnel/internal/connectors"
+	"github.com/wyre-technology/conduit-tunnel/internal/tunnel"
 )
 
 const docsBase = "https://conduit.wyre.ai/docs/guides/onprem"
@@ -47,7 +47,7 @@ func main() {
 // validate config, build the tunnel client, and run until ctx is cancelled
 // (Ctrl-C interactively; a Stop/Shutdown control on Windows) or the client
 // exits with an error. It is the single source of truth for what the
-// connector *does*, so the two entry paths cannot drift.
+// tunnel *does*, so the two entry paths cannot drift.
 func run(ctx context.Context, log *slog.Logger) error {
 	relayURL, token, err := requireEnv()
 	if err != nil {
@@ -63,15 +63,15 @@ func run(ctx context.Context, log *slog.Logger) error {
 		Logger:          log,
 	})
 
-	log.Info("conduit-connector ready: dialing " + relayURL)
+	log.Info("conduit-tunnel ready: dialing " + relayURL)
 	if err := client.Run(ctx); err != nil && ctx.Err() == nil {
-		return fmt.Errorf("connector stopped: %w", err)
+		return fmt.Errorf("tunnel stopped: %w", err)
 	}
-	log.Info("connector shut down cleanly")
+	log.Info("tunnel shut down cleanly")
 	return nil
 }
 
-// runInteractive runs the connector in the foreground, cancelling on Ctrl-C
+// runInteractive runs the tunnel in the foreground, cancelling on Ctrl-C
 // (SIGINT) or SIGTERM. This is the path for a terminal, a container, and the
 // Linux systemd unit (systemd delivers SIGTERM on stop).
 func runInteractive(log *slog.Logger) int {
@@ -93,7 +93,7 @@ func requireEnv() (relayURL, token string, err error) {
 	relayURL = os.Getenv("RELAY_URL")
 	if relayURL == "" {
 		return "", "", fmt.Errorf(
-			"FATAL: RELAY_URL env var is required. The connector refuses to start without a WYRE "+
+			"FATAL: RELAY_URL env var is required. The tunnel refuses to start without a WYRE "+
 				"relay endpoint to dial. Production: RELAY_URL=wss://conduit-wss.wyre.ai. See: %s/reference#relay-url", docsBase)
 	}
 	if !strings.HasPrefix(relayURL, "wss://") {
@@ -108,7 +108,7 @@ func requireEnv() (relayURL, token string, err error) {
 	}
 	if os.Getenv("CAPABILITIES") != "" {
 		return "", "", fmt.Errorf(
-			"FATAL: CAPABILITIES is not a conduit-connector setting — capabilities are configured in "+
+			"FATAL: CAPABILITIES is not a conduit-tunnel setting — capabilities are configured in "+
 				"Conduit and pushed to this agent automatically (protocol v2). Remove the env var. "+
 				"(Deploying the legacy v1 container? That image reads CAPABILITIES; this binary does not.) "+
 				"See: %s/reference#capabilities", docsBase)

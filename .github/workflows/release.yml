@@ -48,11 +48,11 @@ jobs:
           version="${GITHUB_REF_NAME}"
           for target in linux/amd64 linux/arm64 windows/amd64; do
             goos="${target%/*}"; goarch="${target#*/}"
-            out="conduit-connector-${goos}-${goarch}"
+            out="conduit-tunnel-${goos}-${goarch}"
             [ "$goos" = "windows" ] && out="${out}.exe"
             GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
               go build -trimpath -ldflags="-s -w -X main.version=${version}" \
-              -o "dist/${out}" ./cmd/conduit-connector
+              -o "dist/${out}" ./cmd/conduit-tunnel
           done
           ls -la dist/
 
@@ -119,7 +119,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          ( cd dist && sha256sum conduit-connector-* > SHA256SUMS )
+          ( cd dist && sha256sum conduit-tunnel-* > SHA256SUMS )
           ls -la dist/
           gh release create "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
